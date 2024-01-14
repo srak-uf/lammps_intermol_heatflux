@@ -1,0 +1,60 @@
+# s20e500Ne10
+
+units          real
+atom_style     full
+boundary       p p p
+
+pair_style     lj/charmm/coul/long 8.0 12.0
+pair_modify    mix arithmetic
+dielectric     1.0
+special_bonds  lj 0.000000 0.000000 0.500000 coul 0.000000 0.000000 0.833333
+bond_style     harmonic
+angle_style    harmonic
+dihedral_style charmm
+improper_style harmonic
+
+read_data      s20e500Ne10.data
+kspace_style    pppm 1e-6
+group          mobile union all
+timestep       3
+fix            1 mobile nve
+#############################################################
+variable        slab      equal    20
+variable        exchg     equal    500
+variable        Nevery    equal    10
+variable        xlo       equal    2.8616594423101684e+00
+variable        xhi       equal    1.1343317455772988e+02
+#############################################################
+variable        width     equal    (${xhi}-${xlo})/${slab}
+variable        rbin      equal    1/${slab}/2
+variable        Nfreq     equal    ${exchg}/${Nevery}
+
+fix            2 all thermal/conductivity ${exchg} x ${slab}
+
+compute   layers all chunk/atom bin/1d x lower ${rbin} units reduced
+fix       3 all ave/chunk ${Nevery} ${Nfreq} ${exchg} layers temp file celltemp.profile norm sample
+fix       4 all ave/chunk ${Nevery} ${Nfreq} ${exchg} layers density/mass file celldens.profile norm sample
+
+######################       RNEMD      #######################
+# Jz     = deltaQ/(deltaTime * S)  ;  Jz*deltaTime = deltaQ/S #
+# deltaQ = f_2/2                                              #
+# S      = lx*ly                                              #
+###############################################################
+# variable       Jtime   equal   f_2/(2*l*l)
+variable       Jxtime   equal   f_2/2/ly/lz
+
+# velocity       mobile create 300 12075 mom yes rot yes dist gaussian
+
+log            s20e500Ne10.log
+dump           1 all atom 10000  s20e500Ne10.dump
+dump_modify    1 scale no image yes
+dump           2 all custom 10000  s20e500Ne10.veldump vx vy vz
+
+thermo_style   custom time etotal ke pe ebond eangle edihed eimp evdwl ecoul elong etail enthalpy temp press pxx pxy pxz pyy pyz pzz vol lx ly lz density f_2 v_Jxtime
+thermo_modify  line multi
+thermo         10000
+thermo_modify  flush yes
+restart        10000 s20e500Ne101.rst    s20e500Ne102.rst
+run_style      respa 3 3 2 bond 1 angle 1 dihedral 2 pair 2 kspace 3
+run            2000000
+write_restart  s20e500Ne10.rst

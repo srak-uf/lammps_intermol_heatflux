@@ -1,0 +1,140 @@
+# s20e500Ne5
+
+units          real
+atom_style     full
+boundary       p p p
+
+pair_style     lj/charmm/coul/long 8.0 12.0
+pair_modify    mix arithmetic
+dielectric     1.0
+special_bonds  lj 0.000000 0.000000 0.500000 coul 0.000000 0.000000 0.833333
+bond_style     harmonic
+angle_style    harmonic
+dihedral_style charmm
+improper_style harmonic
+neigh_modify   every 1 delay 1
+read_data      ../s20e200Ne10_last.data
+kspace_style    pppm 1e-6
+group          mobile union all
+fix            1 mobile nve
+timestep       3
+#############################################################
+variable        slab      equal    20
+variable        exchg     equal    1
+variable        Nevery    equal    1
+variable        zlo       equal    zlo
+variable        zhi       equal    zhi
+#############################################################
+variable        width     equal    (${zhi}-${zlo})/${slab}
+variable        rbin      equal    1/${slab}/2
+variable        Nfreq     equal    ${exchg}/${Nevery}
+
+
+compute        layers all chunk/atom bin/1d z lower ${rbin} units reduced
+fix            3 all ave/chunk ${Nevery} ${Nfreq} ${exchg} layers temp file celltemp.profile norm sample
+fix            4 all ave/chunk ${Nevery} ${Nfreq} ${exchg} layers density/mass file celldens.profile norm sample
+
+####################################################################
+##########################    heat  Flux  ##########################
+####################################################################
+######################  all  heat flux  #########################
+compute         KE        all   ke/atom
+compute         PE        all   pe/atom
+
+compute         Stress    all   stress/atom NULL virial
+compute         Spair     all   stress/atom NULL pair
+compute         Spairer   all   stress/atom NULL interpair
+compute         Spairra   all   stress/atom NULL intrapair
+compute         Sbond     all   stress/atom NULL bond
+compute         Sangle    all   stress/atom NULL angle
+compute         Sdihed    all   stress/atom NULL dihedral
+compute         Simpro    all   stress/atom NULL improper
+compute         Skspac    all   stress/atom NULL kspace
+compute         Sfix      all   stress/atom NULL fix
+
+compute         Flux      all   heat/flux    KE     PE    Stress
+variable        Jz       equal     c_Flux[3]/vol
+
+# empty
+group           empty     type      99999
+compute         KENULL    empty ke/atom
+compute         PENULL    empty pe/atom improper
+compute         STNULL    empty stress/atom NULL improper
+
+
+########################   Cell half-left   ########################
+variable        jlzlo     equal    ${zlo}+${width}*2.0
+variable        jlzhi     equal    ${zlo}+(${slab}/2)*${width}-${width}
+region          lhalf     block    INF  INF  INF  INF  ${jlzlo}  ${jlzhi}  units box
+group           halfL     dynamic   all    region    lhalf  every  ${Nevery}  # Nevery=ave/time Nevery
+
+
+#######################   energy Flux  JE   ########################
+compute         lFlux    halfL    heat/flux   KE         PE        Stress
+
+#1st term   eivi
+compute         lF1ke    halfL    heat/flux   KE         PENULL    STNULL
+compute         lF1pe    halfL    heat/flux   KENULL     PE        STNULL
+
+#2nd term   Sivi
+compute         lSivi    halfL    heat/flux   KENULL     PENULL    Stress
+compute         lFpair   halfL    heat/flux   KENULL     PENULL    Spair
+compute         lFpairer halfL    heat/flux   KENULL     PENULL    Spairer
+compute         lFpairra halfL    heat/flux   KENULL     PENULL    Spairra
+compute         lFbond   halfL    heat/flux   KENULL     PENULL    Sbond
+compute         lFangle  halfL    heat/flux   KENULL     PENULL    Sangle
+compute         lFdihed  halfL    heat/flux   KENULL     PENULL    Sdihed
+compute         lFimpro  halfL    heat/flux   KENULL     PENULL    Simpro
+compute         lFkspac  halfL    heat/flux   KENULL     PENULL    Skspac
+compute         lFfix    halfL    heat/flux   KENULL     PENULL    Sfix
+
+fix            20 halfL ave/time ${Nevery} ${Nfreq} ${exchg}  c_lFlux[3] c_lF1ke[3] c_lF1pe[3] c_lFpair[3] c_lFpairer[3] c_lFpairra[3] c_lFbond[3] c_lFangle[3] c_lFdihed[3] c_lFimpro[3] c_lFkspac[3] c_lFfix[3] file heatflux.profile
+
+
+########################   Cell half-right   #######################
+variable        jrzlo     equal    ${zlo}+(1+${slab}/2)*${width}+${width}
+variable        jrzhi     equal    ${zhi}-${width}
+region          rhalf      block    INF  INF  INF  INF  ${jrzlo}  ${jrzhi} units box
+group           halfR     dynamic   all    region    rhalf  every  ${Nevery}
+
+
+########################   energy Flux  JE   ########################
+compute         rFlux    halfR    heat/flux   KE         PE        Stress
+
+#1st term   eivi
+compute         rF1ke    halfR    heat/flux   KE         PENULL    STNULL
+compute         rF1pe    halfR    heat/flux   KENULL     PE        STNULL
+
+#2nd term   Sivi
+compute         rSivi    halfR    heat/flux   KENULL     PENULL    Stress
+compute         rFpair   halfR    heat/flux   KENULL     PENULL    Spair
+compute         rFpairer halfR    heat/flux   KENULL     PENULL    Spairer
+compute         rFpairra halfR    heat/flux   KENULL     PENULL    Spairra
+compute         rFbond   halfR    heat/flux   KENULL     PENULL    Sbond
+compute         rFangle  halfR    heat/flux   KENULL     PENULL    Sangle
+compute         rFdihed  halfR    heat/flux   KENULL     PENULL    Sdihed
+compute         rFimpro  halfR    heat/flux   KENULL     PENULL    Simpro
+compute         rFkspac  halfR    heat/flux   KENULL     PENULL    Skspac
+compute         rFfix    halfR    heat/flux   KENULL     PENULL    Sfix
+
+fix            30 halfR ave/time ${Nevery} ${Nfreq} ${exchg}  c_rFlux[3] c_rF1ke[3] c_rF1pe[3] c_rFpair[3] c_rFpairer[3] c_rFpairra[3] c_rFbond[3] c_rFangle[3] c_rFdihed[3] c_rFimpro[3] c_rFkspac[3] c_rFfix[3] file heatflux.profile2
+
+######################       RNEMD      #######################
+# Jz     = deltaQ/(deltaTime * S)  ;  Jz*deltaTime = deltaQ/S #
+# deltaQ = f_2/2                                              #
+# S      = lx*ly                                              #
+###############################################################
+# variable       Jtime   equal   f_2/(2*l*l)
+variable       Jztime   equal   f_2/2/lx/ly
+
+
+log            s20e200Ne5.log
+
+thermo_style   custom time etotal ke pe ebond eangle edihed eimp evdwl ecoul elong etail enthalpy temp  vol lx ly lz density c_lFlux[3] c_rFlux[3] 
+thermo_modify  line multi
+thermo         10000
+
+
+rerun          ../s20e500Ne5.dump   first  11084900   every 1  dump x y z vx vy vz
+
+
